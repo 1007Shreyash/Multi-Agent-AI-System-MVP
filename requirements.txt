@@ -1,0 +1,17 @@
+# Developed by Shreyash Chougule
+# Email: shreyash.v.chougule1903@gmail.com
+# Project: Multi-Agent AI System (MVP)
+
+# --- Core dependencies ---
+streamlit==1.51.0
+openai>=1.2.0
+python-dotenv
+requests
+plotly
+pandas
+psycopg2-binary
+google-generativeai
+streamlit-audiorec
+
+# --- Optional (useful libraries) ---
+langchain

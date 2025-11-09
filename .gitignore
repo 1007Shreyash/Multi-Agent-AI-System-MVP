@@ -1,0 +1,12 @@
+# Ignore the Streamlit secrets file
+.streamlit/secrets.toml
+
+# Ignore common Python files
+__pycache__/
+pycache/
+*.pyc
+.env
+
+# Ignore environment folders (like venv)
+venv/
+.venv/
