@@ -12,6 +12,8 @@ pandas
 psycopg2-binary
 google-generativeai
 streamlit-audiorec
+firebase-admin
+google-cloud-firestore
 
 # --- Optional (useful libraries) ---
 langchain
