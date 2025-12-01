@@ -10,7 +10,7 @@ requests
 psycopg2-binary
 google-generativeai
 streamlit-audiorec
-notion-client>=2.2.1
+notion-client==2.2.1
 google-api-python-client
 google-auth
 pyTelegramBotAPI
