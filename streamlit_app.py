@@ -302,41 +302,84 @@ try:
             st.info("No agent activity yet. Start using the system to see analytics!")
 
     with tab3:
-        st.header("📈 XP Growth")
-        history = st.session_state.db.get_task_history(st.session_state.user_id)
-        if history:
+        # --- XP Progress Tab ---
+        st.header("📈 XP Progress & Task History")
+        
+        xp_stats = st.session_state.parent_agent.get_xp_stats()
+        task_history = st.session_state.db.get_task_history(st.session_state.user_id, limit=50)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Current Level", xp_stats['level'], delta=None)
+        with col2:
+            st.metric("Total XP", xp_stats['total_xp'])
+        with col3:
+            st.metric("Tasks Completed", xp_stats['tasks_completed'])
+        
+        st.divider()
+        
+        if task_history:
             import plotly.express as px
             import pandas as pd
-            history.sort(key=lambda x: x['task_number'])
+            
+            st.subheader("XP Accumulation Over Time")
+            
+            # --- CHART LOGIC: Sort Oldest -> Newest ---
+            # We create a specific list just for the chart, sorted by Task Number (1, 2, 3...)
+            # This ensures the graph line goes UP from left to right.
+            chart_data = sorted(task_history, key=lambda x: x['task_number'])
             
             cumulative_xp = []
-            current_total = 0
-            task_nums = []
+            current_xp = 0
+            task_numbers = []
             
-            for task in history:
-                current_total += task['xp']
-                cumulative_xp.append(current_total)
-                task_nums.append(task['task_number'])
-                
-            df = pd.DataFrame({'Task': task_nums, 'Total XP': cumulative_xp})
+            for task in chart_data:
+                current_xp += task['xp']
+                cumulative_xp.append(current_xp)
+                task_numbers.append(task['task_number'])
             
-            # Create the Line Chart
-            fig = px.line(
+            df = pd.DataFrame({
+                'Task Number': task_numbers,
+                'Cumulative XP': cumulative_xp
+            })
+            
+            fig_line = px.line(
                 df, 
-                x='Task', 
-                y='Total XP', 
-                title="XP Growth Curve (All Time)", 
+                x='Task Number', 
+                y='Cumulative XP',
+                title="XP Growth Curve",
                 markers=True
             )
-            st.plotly_chart(fig)
+            st.plotly_chart(fig_line, width = 'stretch')
             
             st.divider()
-            st.subheader("📋 Recent Logs")
-            # Show NEWEST first for the table (Reverse the sorted list)
-            for task in reversed(history[-10:]):
-                st.write(f"**{task['type']}** | +{task['xp']} XP")
+            st.subheader("📋 Recent Task History")
+            
+            # --- TABLE LOGIC: Keep Newest -> Oldest ---
+            # We use the original 'task_history' list here because it comes 
+            # from Notion sorted by Newest first.
+            for i, task in enumerate(task_history[:10], 1):
+                if task.get('created_at'):
+                    # Check if it's a datetime object (Notion Manager v2) or string
+                    if hasattr(task['created_at'], 'strftime'):
+                        time_str = task['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+                    else:
+                        time_str = str(task['created_at'])
+                else:
+                    time_str = "just now"
+                    
+                col1, col2, col3, col4 = st.columns([2, 2, 2, 4])
+                with col1:
+                    st.write(f"**Task #{task['task_number']}**")
+                with col2:
+                    st.write(f"Type: {task['type']}")
+                with col3:
+                    st.write(f"+{task['xp']} XP")
+                with col4:
+                    st.write(f"{time_str}")
         else:
-            st.info("Start completing tasks to see growth!")
+            st.info("No task history yet. Complete tasks to see your progress!")
 
     with tab4:
         # --- PAEI Personality Tab ---
