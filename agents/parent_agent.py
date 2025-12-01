@@ -4,13 +4,9 @@
 import os
 import json
 import time
-<<<<<<< HEAD
 from llm_wrapper import LLMWrapper 
-=======
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
->>>>>>> 80e94f5bf5950bea36b97466b105b71a9062ba7a
-
 from agents.context_manager import ContextManager
 from agents.xp_agent import XPAgent
 from agents.email_agent import EmailAgent
@@ -22,17 +18,14 @@ from agents.notion_agent import NotionAgent
 from agents.slack_agent import SlackAgent
 
 class ParentAgent:
-<<<<<<< HEAD
     def __init__(self, db=None, user_id=None, google_api_key=None, calendar_manager=None, email_manager=None):
         self.model = LLMWrapper(api_key=google_api_key, model_name="llama-3.3-70b-versatile")
-=======
     def __init__(self, db=None, user_id=None, google_api_key=None):
         if google_api_key:
             genai.configure(api_key=google_api_key)
         
         # Using Gemini 2.0 Flash Lite for speed and reliability
         self.model = genai.GenerativeModel('gemini-2.0-flash-lite')
->>>>>>> 80e94f5bf5950bea36b97466b105b71a9062ba7a
         
         self.db = db
         self.user_id = user_id
@@ -47,7 +40,6 @@ class ParentAgent:
         self.research_agent = ResearchAgent(model=self.model)
         self.report_agent = ReportAgent(model=self.model, db=db, user_id=user_id)
         self.paei_personality = PAEIPersonality(db=db, user_id=user_id)
-<<<<<<< HEAD
         self.notion_agent = NotionAgent(model=self.model)
         self.slack_agent = SlackAgent(model=self.model)
         
@@ -107,7 +99,6 @@ class ParentAgent:
             updated_context = self.context_manager.get_context()
             
             xp_info = {"xp_earned": total_xp, "level": self.xp_agent.get_stats()['level']}
-=======
         self.calendar_agent = CalendarAgent(model=self.model)
         self.notion_agent = NotionAgent(model=self.model)
         self.slack_agent = SlackAgent(model=self.model)
@@ -164,12 +155,10 @@ class ParentAgent:
             updated_context = self.context_manager.get_context()
             
             response = self._compile_response(result, xp_info, updated_context)
->>>>>>> 80e94f5bf5950bea36b97466b105b71a9062ba7a
             
             return self._compile_response(final_response_text, xp_info, updated_context, paei_analysis)
             
         except Exception as e:
-<<<<<<< HEAD
             return f"❌ Error: {str(e)}"
 
     def _route_agent(self, agent_name, instruction):
@@ -188,7 +177,6 @@ class ParentAgent:
         Context: Energy {context['energy_level']}
         
         Agents Available: calendar, email, research, report, notion, slack, general.
-=======
             if "429" in str(e):
                 return "⏳ **API Rate Limit Reached:** Please wait a moment. The free tier allows limited requests per minute."
             return f"❌ Error: {str(e)}"
@@ -244,7 +232,6 @@ Return JSON ONLY: {{ "agent": "name", "reasoning": "why" }}"""
             return f"💬 **Response:**\n\n{response.text}"
         except Exception as e:
             return f"I can help with various tasks. Error: {e}"
->>>>>>> 80e94f5bf5950bea36b97466b105b71a9062ba7a
 
         RULES:
         1. ONLY use agents explicitly requested or logically required.
@@ -284,23 +271,17 @@ Return JSON ONLY: {{ "agent": "name", "reasoning": "why" }}"""
         response = f"🧠 **Executive Thought:** _{paei_analysis}_\n\n"
         response += f"{result}"
         response += f"---\n"
-<<<<<<< HEAD
         response += f"**✨ Total XP:** +{xp_info.get('xp_earned', 0)} XP | **Level:** {xp_info['level']}"
-=======
         response += f"**✨ XP Earned:** +{xp_info['xp_earned']} XP | "
         response += f"**Level {xp_info['level']}** ({xp_info['total_xp']} total XP) | "
         response += f"**Tasks:** {xp_info['tasks_completed']}\n"
         response += f"**⚡ Energy:** {context['energy_level']}/100 | "
         response += f"**Flow State:** {context['flow_state'].capitalize()}"
->>>>>>> 80e94f5bf5950bea36b97466b105b71a9062ba7a
         return response
     
     def get_xp_stats(self): return self.xp_agent.get_stats()
     def get_context(self): return self.context_manager.get_context()
     def get_personality_profile(self): return self.paei_personality.get_personality_profile()
     def get_personality_recommendations(self): return self.paei_personality.get_personality_recommendations()
-<<<<<<< HEAD
     def get_personality_badge(self): return self.paei_personality.get_personality_badge()
-=======
     def get_personality_badge(self): return self.paei_personality.get_personality_badge()
->>>>>>> 80e94f5bf5950bea36b97466b105b71a9062ba7a
