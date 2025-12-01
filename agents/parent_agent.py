@@ -5,8 +5,7 @@ import os
 import json
 import time
 from llm_wrapper import LLMWrapper 
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
 from agents.context_manager import ContextManager
 from agents.xp_agent import XPAgent
 from agents.email_agent import EmailAgent
@@ -20,12 +19,6 @@ from agents.slack_agent import SlackAgent
 class ParentAgent:
     def __init__(self, db=None, user_id=None, google_api_key=None, calendar_manager=None, email_manager=None):
         self.model = LLMWrapper(api_key=google_api_key, model_name="llama-3.3-70b-versatile")
-    def __init__(self, db=None, user_id=None, google_api_key=None):
-        if google_api_key:
-            genai.configure(api_key=google_api_key)
-        
-        # Using Gemini 2.0 Flash Lite for speed and reliability
-        self.model = genai.GenerativeModel('gemini-2.0-flash-lite')
         
         self.db = db
         self.user_id = user_id
@@ -99,62 +92,6 @@ class ParentAgent:
             updated_context = self.context_manager.get_context()
             
             xp_info = {"xp_earned": total_xp, "level": self.xp_agent.get_stats()['level']}
-        self.calendar_agent = CalendarAgent(model=self.model)
-        self.notion_agent = NotionAgent(model=self.model)
-        self.slack_agent = SlackAgent(model=self.model)
-        
-        self.safety_settings = {
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-        }
-        self.json_generation_config = genai.GenerationConfig(
-            response_mime_type="application/json"
-        )
-
-    def handle_request(self, user_input):
-        try:
-            # Add a small delay to avoid hitting rate limits instantly
-            time.sleep(1)
-            
-            context = self.context_manager.get_context()
-            intent = self._analyze_intent(user_input, context)
-            
-            # Error Handling within Intent
-            if intent.get("agent") == "general" and "Error" in intent.get("reasoning", ""):
-                 # Fallback to general, passing the error reasoning internally if needed
-                 pass
-            
-            # Routing
-            if intent["agent"] == "email":
-                result = self._handle_email(user_input)
-                xp_earned = self.xp_agent.calculate_xp_for_task("email")
-            elif intent["agent"] == "research":
-                result = self._handle_research(user_input)
-                xp_earned = self.xp_agent.calculate_xp_for_task("research")
-            elif intent["agent"] == "report":
-                result = self._handle_report() 
-                xp_earned = self.xp_agent.calculate_xp_for_task("report")
-            elif intent["agent"] == "calendar":
-                result = self._handle_calendar(user_input)
-                xp_earned = self.xp_agent.calculate_xp_for_task("complex")
-            elif intent["agent"] == "notion":
-                result = self._handle_notion(user_input)
-                xp_earned = self.xp_agent.calculate_xp_for_task("complex")
-            elif intent["agent"] == "slack":
-                result = self._handle_slack(user_input)
-                xp_earned = self.xp_agent.calculate_xp_for_task("email")
-            else: 
-                result = self._handle_general(user_input)
-                xp_earned = self.xp_agent.calculate_xp_for_task("simple")
-            
-            # XP and Context Updates
-            xp_info = self.xp_agent.add_xp(xp_earned, intent["agent"])
-            self.context_manager.update_context(intent["agent"])
-            updated_context = self.context_manager.get_context()
-            
-            response = self._compile_response(result, xp_info, updated_context)
             
             return self._compile_response(final_response_text, xp_info, updated_context, paei_analysis)
             
@@ -177,61 +114,6 @@ class ParentAgent:
         Context: Energy {context['energy_level']}
         
         Agents Available: calendar, email, research, report, notion, slack, general.
-            if "429" in str(e):
-                return "⏳ **API Rate Limit Reached:** Please wait a moment. The free tier allows limited requests per minute."
-            return f"❌ Error: {str(e)}"
-
-    def _analyze_intent(self, user_input, context):
-        prompt = f"""Route this user request. 
-User Input: "{user_input}"
-Context: Energy {context['energy_level']}
-
-Agents: "email", "research", "report", "calendar", "notion", "slack", "general".
-
-Return JSON ONLY: {{ "agent": "name", "reasoning": "why" }}"""
-
-        try:
-            response = self.model.generate_content(
-                prompt,
-                generation_config=self.json_generation_config,
-                safety_settings=self.safety_settings
-            )
-            
-            clean_text = response.text.strip()
-            if clean_text.startswith("```json"): clean_text = clean_text[7:]
-            if clean_text.endswith("```"): clean_text = clean_text[:-3]
-            
-            intent_data = json.loads(clean_text)
-            
-            # Fix: Handle List vs Dictionary return types
-            if isinstance(intent_data, list):
-                if len(intent_data) > 0:
-                    intent_data = intent_data[0] 
-                else:
-                    return {"agent": "general", "reasoning": "Empty list returned"}
-
-            valid = ["email", "research", "report", "calendar", "notion", "slack", "general"]
-            if intent_data.get("agent") not in valid:
-                return {"agent": "general", "reasoning": "Invalid agent name returned"}
-
-            return intent_data
-        except Exception as e:
-            return {"agent": "general", "reasoning": f"Error: {str(e)}"}
-
-    def _handle_email(self, user_input): return self.email_agent.handle_task(user_input, self.safety_settings)
-    def _handle_research(self, user_input): return self.research_agent.handle_task(user_input, self.safety_settings)
-    def _handle_report(self): return self.report_agent.generate_xp_report(self.xp_agent, self.context_manager)
-    def _handle_calendar(self, user_input): return self.calendar_agent.handle_task(user_input, self.safety_settings)
-    def _handle_notion(self, user_input): return self.notion_agent.handle_task(user_input, self.safety_settings)
-    def _handle_slack(self, user_input): return self.slack_agent.handle_task(user_input, self.safety_settings)
-    
-    def _handle_general(self, user_input):
-        try:
-            chat_model = genai.GenerativeModel('gemini-2.0-flash-lite', system_instruction="You are a helpful AI.")
-            response = chat_model.generate_content(user_input, safety_settings=self.safety_settings)
-            return f"💬 **Response:**\n\n{response.text}"
-        except Exception as e:
-            return f"I can help with various tasks. Error: {e}"
 
         RULES:
         1. ONLY use agents explicitly requested or logically required.
@@ -272,16 +154,10 @@ Return JSON ONLY: {{ "agent": "name", "reasoning": "why" }}"""
         response += f"{result}"
         response += f"---\n"
         response += f"**✨ Total XP:** +{xp_info.get('xp_earned', 0)} XP | **Level:** {xp_info['level']}"
-        response += f"**✨ XP Earned:** +{xp_info['xp_earned']} XP | "
-        response += f"**Level {xp_info['level']}** ({xp_info['total_xp']} total XP) | "
-        response += f"**Tasks:** {xp_info['tasks_completed']}\n"
-        response += f"**⚡ Energy:** {context['energy_level']}/100 | "
-        response += f"**Flow State:** {context['flow_state'].capitalize()}"
         return response
     
     def get_xp_stats(self): return self.xp_agent.get_stats()
     def get_context(self): return self.context_manager.get_context()
     def get_personality_profile(self): return self.paei_personality.get_personality_profile()
     def get_personality_recommendations(self): return self.paei_personality.get_personality_recommendations()
-    def get_personality_badge(self): return self.paei_personality.get_personality_badge()
     def get_personality_badge(self): return self.paei_personality.get_personality_badge()
