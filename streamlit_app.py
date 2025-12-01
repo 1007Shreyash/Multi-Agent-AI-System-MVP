@@ -306,7 +306,7 @@ try:
         st.header("📈 XP Progress & Task History")
         
         xp_stats = st.session_state.parent_agent.get_xp_stats()
-        task_history = st.session_state.db.get_task_history(st.session_state.user_id, limit=50)
+        task_history = st.session_state.db.get_task_history(st.session_state.user_id, limit=1000)
         
         col1, col2, col3 = st.columns(3)
         
