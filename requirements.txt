@@ -10,7 +10,6 @@ requests
 psycopg2-binary
 google-generativeai
 streamlit-audiorec
-<<<<<<< HEAD
 notion-client>=2.2.1
 google-api-python-client
 google-auth
@@ -18,11 +17,6 @@ pyTelegramBotAPI
 st-audiorec
 pandas
 plotly
-toml
-=======
-firebase-admin
-google-cloud-firestore
->>>>>>> 80e94f5bf5950bea36b97466b105b71a9062ba7a
 
 # --- Optional (useful libraries) ---
 langchain
