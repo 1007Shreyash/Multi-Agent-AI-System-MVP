@@ -1,5 +1,4 @@
 # Developed by Shreyash Chougule
-# Email: shreyash.v.chougule1903@gmail.com
 # Project: Multi-Agent AI System (MVP)
 
 import os
@@ -19,11 +18,6 @@ from agents.slack_agent import SlackAgent
 
 class ParentAgent:
     def __init__(self, db=None, user_id=None, google_api_key=None, calendar_manager=None, email_manager=None):
-        """
-        The Brain. Now powered by GROQ (Llama 3.3) via Wrapper.
-        """
-        # Connect to Groq via LLM Wrapper
-        # Note: google_api_key argument now holds the Groq Key
         self.model = LLMWrapper(api_key=google_api_key, model_name="llama-3.3-70b-versatile")
         
         self.db = db
@@ -34,18 +28,14 @@ class ParentAgent:
         self.context_manager = ContextManager()
         self.xp_agent = XPAgent(db=db, user_id=user_id)
         
-        # --- CHILD AGENTS (With Managers) ---
         self.email_agent = EmailAgent(model=self.model, email_manager=self.email_manager)
         self.calendar_agent = CalendarAgent(model=self.model, calendar_manager=self.calendar_manager)
-        
-        # Standard Agents
         self.research_agent = ResearchAgent(model=self.model)
         self.report_agent = ReportAgent(model=self.model, db=db, user_id=user_id)
         self.paei_personality = PAEIPersonality(db=db, user_id=user_id)
         self.notion_agent = NotionAgent(model=self.model)
         self.slack_agent = SlackAgent(model=self.model)
         
-        # Config placeholders (kept for compatibility)
         self.safety_settings = {} 
         self.json_generation_config = {}
 
@@ -54,7 +44,6 @@ class ParentAgent:
             time.sleep(0.5)
             context = self.context_manager.get_context()
             
-            # 1. Analyze Intent
             analysis = self._analyze_intent(user_input, context)
             steps = analysis.get("steps", [])
             paei_analysis = analysis.get("paei_analysis", "Processing request.")
@@ -62,23 +51,30 @@ class ParentAgent:
             final_response_text = ""
             total_xp = 0
 
-            # 2. Execute Steps
-            previous_output = ""
+            # --- FIX 1: Cumulative Context Log ---
+            # We store ALL past results here so the Email Agent sees everything (Research, etc.)
+            execution_log = "" 
             
             for i, step in enumerate(steps, 1):
                 agent_name = step.get("agent")
                 instruction = step.get("instruction")
                 
-                if previous_output:
-                    instruction += f"\n[Context from previous step: {previous_output}]"
+                # Pass full history to the current agent
+                if execution_log:
+                    instruction += f"\n\n[HISTORY OF PREVIOUS STEPS]:\n{execution_log}"
 
                 result = self._route_agent(agent_name, instruction)
-                previous_output = result
+                
+                # Append result to history
+                execution_log += f"--- Result from {agent_name} ---\n{result}\n\n"
                 
                 xp = self.xp_agent.calculate_xp_for_task(agent_name)
                 total_xp += xp
                 
-                final_response_text += f"**Step {i} ({agent_name.title()}):**\n{result}\n\n"
+                if len(steps) > 1:
+                    final_response_text += f"**Step {i} ({agent_name.title()}):**\n{result}\n\n"
+                else:
+                    final_response_text += f"{result}\n\n"
                 
                 if self.db:
                     paei_map = {
@@ -112,21 +108,24 @@ class ParentAgent:
         else: return self._handle_general(instruction)
 
     def _analyze_intent(self, user_input, context):
+        # --- FIX 2: STRICTER RULES ---
         prompt = f"""You are the Executive OS. Break down the user request.
         User Request: "{user_input}"
         Context: Energy {context['energy_level']}
         
         Agents Available: calendar, email, research, report, notion, slack, general.
 
-        IF COMPLEX (e.g., "Schedule X and Email Y"):
-        Return a list of steps.
-        
+        RULES:
+        1. ONLY use agents explicitly requested or logically required.
+        2. Do NOT add a 'report' step unless the user specifically asks for "performance report" or "stats".
+        3. Do NOT add a 'notion' step unless the user says "save this".
+        4. If the user asks to "Research X and email it", the steps are [research, email]. Do NOT add 'report'.
+
         Return JSON ONLY:
         {{
-            "paei_analysis": "Reasoning based on Producer/Admin/Entrepreneur/Integrator.",
+            "paei_analysis": "Reasoning based on Producer/Admin/Entrepreneur/Integrator perspectives.",
             "steps": [
-                {{ "agent": "calendar", "instruction": "..." }},
-                {{ "agent": "email", "instruction": "..." }}
+                {{ "agent": "agent_name", "instruction": "specific instruction" }}
             ]
         }}
         """
@@ -134,26 +133,19 @@ class ParentAgent:
         try:
             response = self.model.generate_content(prompt)
             text = response.text.strip()
-            
             if text.startswith("```json"): text = text[7:]
             if text.endswith("```"): text = text[:-3]
-            
             data = json.loads(text)
             
             if "steps" not in data or not isinstance(data["steps"], list):
                 return {"steps": [{"agent": "general", "instruction": user_input}], "paei_analysis": "General execution."}
-            
             return data
         except Exception as e:
             return {"steps": [{"agent": "general", "instruction": f"Intent Error: {e}"}], "paei_analysis": "Error."}
 
     def _handle_general(self, i):
         try:
-            chat_model = LLMWrapper(
-                api_key=self.model.client.api_key, 
-                model_name="llama-3.3-70b-versatile",
-                system_instruction="You are a helpful AI."
-            )
+            chat_model = LLMWrapper(api_key=self.model.client.api_key, model_name="llama-3.3-70b-versatile", system_instruction="You are a helpful AI.")
             return f"💬 **Response:**\n\n{chat_model.generate_content(i).text}"
         except Exception as e: return f"Error: {e}"
 
