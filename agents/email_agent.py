@@ -10,32 +10,13 @@ class EmailAgent:
         self.email_manager = email_manager
 
     def format_for_email(self, text):
-        """
-        Converts Markdown (from AI) to HTML (for Gmail).
-        This ensures the email looks professional.
-        """
-        # 1. Escape HTML first
+        if not text: return ""
         text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        
-        # 2. Convert Newlines to <br> (Critical for Email)
         text = text.replace("\n", "<br>")
-        
-        # 3. Convert **Bold** to <b>Bold</b>
         text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-        
-        # 4. Convert Headers (###) to <h3>
         text = re.sub(r'#{1,6}\s+(.*?)(<br>|$)', r'<h3>\1</h3>', text)
-        
-        # 5. Convert Bullet Points (* ) to HTML lists
-        # Simple replacement for visual clarity
         text = re.sub(r'(<br>|^)\s*\*\s', r'\1 &bull; ', text)
-        
-        # 6. Wrap in a nice font div
-        return f"""
-        <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
-            {text}
-        </div>
-        """
+        return f"""<div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">{text}</div>"""
 
     def handle_task(self, user_request, safety_settings):
         if not self.email_manager:
@@ -48,8 +29,9 @@ class EmailAgent:
         TASK: Determine action ("READ" or "SEND").
         
         IF SENDING:
-        - LOOK for "HISTORY OF PREVIOUS STEPS" in the input. That is the content you must email.
-        - Create a subject line based on that content.
+        - Analyze the "CONTEXT FROM PREVIOUS STEPS" (if available).
+        - EXTRACT only the relevant info.
+        - Write a clean, natural email body.
         - Recipient: If the user says "team", use "team@placeholder.com".
         
         CRITICAL JSON RULES:
@@ -68,13 +50,29 @@ class EmailAgent:
         
         try:
             response = self.model.generate_content(prompt, safety_settings=safety_settings)
+            
+            # --- FIX: Check for Empty Response ---
+            if not response or not response.text:
+                return "⚠️ **Email Agent Error:** The AI returned an empty response. Please try again."
+
             text = response.text.strip()
+            
+            # Clean Markdown wrappers
             if text.startswith("```"):
                 start = text.find("{")
                 end = text.rfind("}") + 1
                 if start != -1 and end != -1: text = text[start:end]
             
-            data = json.loads(text, strict=False)
+            # --- FIX: Handle Empty Parsed Text ---
+            if not text:
+                return "⚠️ **Email Agent Error:** Could not extract JSON from AI response."
+
+            try:
+                data = json.loads(text, strict=False)
+            except json.JSONDecodeError:
+                # If JSON fails, return the raw text so you at least see what happened
+                return f"⚠️ **Email Parsing Error:** The AI did not return valid JSON.\nRaw Output: {text[:100]}..."
+
             action = data.get("action")
             
             if action == "READ":
@@ -84,22 +82,16 @@ class EmailAgent:
             elif action == "SEND":
                 to_email = data.get("to_email")
                 
-                # Smart Recipient Replacement
                 if "example.com" in to_email or "placeholder.com" in to_email:
                     to_email = self.email_manager.email 
                     note = "_(Redirected to your email)_"
                 else:
                     note = ""
 
-                # --- FIX: Format Body as HTML ---
-                raw_body = data.get("body")
+                raw_body = data.get("body", "No content")
                 html_body = self.format_for_email(raw_body)
 
-                result = self.email_manager.send_email(
-                    to_email,
-                    data.get("subject"),
-                    html_body # Send the formatted HTML
-                )
+                result = self.email_manager.send_email(to_email, data.get("subject"), html_body)
                 
                 return f"📧 **Email Agent:**\n\n{result} {note}\n\n**Draft Sent:**\n> {raw_body[:200]}..."
             
@@ -107,4 +99,4 @@ class EmailAgent:
                 return f"❌ Could not determine email action."
 
         except Exception as e:
-            return f"⚠️ Email Error (JSON): {e}"
+            return f"⚠️ Critical Email Error: {str(e)}"
